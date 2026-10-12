@@ -1,43 +1,43 @@
-# Generador de Borradores Outlook
+# Outlook Supplier Claim Drafter
 
-Aplicación de escritorio en Python para preparar borradores de reclamación de pedidos pendientes a proveedores.
+Python desktop application for preparing claim email drafts for outstanding supplier orders.
 
-## Estado del proyecto
+## Project Status
 
-**Fase actual:** Fase 00 — Preparación del repositorio.
+**Current phase:** Phase 00 — Repository Setup.
 
-La aplicación funcional todavía no está implementada. Los requisitos, las decisiones técnicas y el estado de cada fase se documentarán conforme al protocolo maestro.
+The functional application has not been implemented yet. Requirements, technical decisions, and phase status will be documented according to the master development protocol.
 
-## Objetivo previsto
+## Planned Objectives
 
-- Consultar información de pedidos pendientes en SQL Server en modo exclusivamente de lectura.
-- Permitir revisar proveedores y líneas pendientes en una interfaz de escritorio.
-- Preparar borradores de correo y archivos Excel para revisión del usuario.
-- Mantener personalizaciones e historial local por usuario.
-- Separar la configuración de desarrollo de la configuración corporativa.
+- Retrieve outstanding order data from SQL Server in read-only mode.
+- Allow users to review suppliers and outstanding order lines through a desktop interface.
+- Prepare email drafts and Excel files for user review.
+- Maintain user-specific local customizations and history.
+- Keep development and corporate environment configurations separate.
 
-Los mecanismos concretos de integración con Outlook moderno y las reglas de duplicidad del historial deberán investigarse y validarse antes de implementarse.
+The integration mechanism for modern Outlook and the history deduplication rules must be investigated and validated before implementation.
 
-## Entorno de desarrollo
+## Development Environment
 
-La versión propuesta inicialmente es Python 3.13 de 64 bits. Su compatibilidad con las dependencias y con el entorno corporativo está pendiente de validación.
+Python 3.13 (64-bit) is the initially proposed version. Compatibility with the required dependencies and the corporate environment remains to be validated.
 
-La preparación del entorno virtual y las instrucciones de ejecución se documentarán cuando se hayan comprobado en el equipo de desarrollo.
+Virtual environment setup and execution instructions will be documented once they have been verified on the development machine.
 
-## Estructura
+## Project Structure
 
-- `src/`: código de la aplicación, pendiente de implementación.
-- `tests/`: pruebas, pendientes de incorporación.
-- `docs/`: protocolo, alcance, decisiones y estado de las fases.
+- `src/`: application source code, pending implementation.
+- `tests/`: tests, pending implementation.
+- `docs/`: master protocol, scope, decisions, and phase status.
 
-## Seguridad
+## Security
 
-- No almacenar credenciales en el repositorio.
-- No versionar bases de datos locales ni archivos de proveedores.
-- No escribir datos en SQL Server.
-- No enviar correos reales durante pruebas sin autorización explícita.
-- Generar un borrador no equivale a enviar un correo.
+- Do not store credentials in the repository.
+- Do not commit local databases or supplier files.
+- Do not write data to SQL Server.
+- Do not send real emails during testing without explicit authorization.
+- Generating a draft does not mean sending an email.
 
-## Protocolo de trabajo
+## Development Protocol
 
-Consultar `docs/protocolo-maestro.md` antes de realizar cambios.
+Consult `docs/protocolo-maestro.md` before making changes.
