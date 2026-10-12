@@ -1,0 +1,2 @@
+# Sin dependencias de desarrollo declaradas en la Fase 00.
+# Las herramientas de pruebas y calidad se decidirán posteriormente.

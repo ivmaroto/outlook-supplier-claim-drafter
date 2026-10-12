@@ -1,0 +1,2 @@
+# Sin dependencias de ejecución declaradas en la Fase 00.
+# Añadir paquetes únicamente tras justificar y aprobar su necesidad.

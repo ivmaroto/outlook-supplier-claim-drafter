@@ -1,0 +1,40 @@
+# Entornos virtuales
+.venv/
+venv/
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Entornos locales y secretos
+.env
+.env.*
+!.env.example
+*.local
+secrets/
+credentials/
+
+# Datos y bases de datos locales
+*.sqlite
+*.sqlite3
+*.db
+
+# Excel y archivos generados localmente
+*.xlsx
+*.xls
+*.csv
+*.pdf
+output/
+exports/
+
+# IDE y sistema operativo
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
