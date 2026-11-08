@@ -1,0 +1,26 @@
+SELECT
+    pedido_compra,
+    cuenta_prov,
+    nombre_prov,
+    fecha_creación,
+    destino_ABC,
+    Fechanecesidad,
+    ProdId,
+    ProdQty,
+    ItemGroup,
+    Item,
+    ItemBuyerGroup,
+    Target,
+    total_lineas_necesidad,
+    codigo,
+    descripcion,
+    informacion_advertencia,
+    cantidad,
+    fecha_entrega,
+    fecha_confirmada,
+    dias_retraso,
+    ACCION,
+    pendiente_entrega,
+    modificado_por
+FROM dbo.LineasPedidoProveedores
+WHERE cuenta_prov = ?

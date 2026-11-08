@@ -1,0 +1,2 @@
+SELECT ACCOUNTNUM, NAME, EMAILS
+FROM dbo.ContactosProveedores

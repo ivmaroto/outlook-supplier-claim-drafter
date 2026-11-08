@@ -1,0 +1,18 @@
+﻿{
+  "contacts": {
+    "account": "ACCOUNTNUM",
+    "name": "NAME",
+    "emails": "EMAILS"
+  },
+  "suppliers": {
+    "account": "cuenta_prov",
+    "name": "nombre_prov",
+    "orders": "total_pedidos"
+  },
+  "order_lines": {
+    "order": "pedido_compra",
+    "product": "ProdId",
+    "description": "descripcion",
+    "quantity": "cantidad"
+  }
+}
