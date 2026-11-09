@@ -11,8 +11,27 @@
   },
   "order_lines": {
     "order": "pedido_compra",
+    "supplier_account": "cuenta_prov",
+    "supplier_name": "nombre_prov",
+    "creation_date": "fecha_creación",
+    "destination_abc": "destino_ABC",
+    "need_date": "Fechanecesidad",
     "product": "ProdId",
+    "product_qty": "ProdQty",
+    "item_group": "ItemGroup",
+    "item": "Item",
+    "buyer_group": "ItemBuyerGroup",
+    "target": "Target",
+    "total_need_lines": "total_lineas_necesidad",
+    "code": "codigo",
     "description": "descripcion",
-    "quantity": "cantidad"
+    "warning_info": "informacion_advertencia",
+    "quantity": "cantidad",
+    "delivery_date": "fecha_entrega",
+    "confirmed_date": "fecha_confirmada",
+    "delay_days": "dias_retraso",
+    "action": "ACCION",
+    "pending_delivery": "pendiente_entrega",
+    "modified_by": "modificado_por"
   }
 }

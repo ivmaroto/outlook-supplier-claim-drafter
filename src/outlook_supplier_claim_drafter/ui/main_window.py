@@ -8,6 +8,7 @@ import html
 import base64
 import ctypes
 import sys
+import os
 import shutil
 import webbrowser
 from datetime import datetime, date
@@ -516,6 +517,49 @@ class MainWindow:
         self._signature_source_path = None
         self._signature_html = self._load_signature()
 
+        # Las columnas de líneas se descubren desde la metadata real de la query.
+        # El mapping solo aporta nombres internos conocidos; no define qué columnas existen.
+        self._available_line_columns = (
+            tuple(self.repository.get_order_line_columns())
+            if self.repository is not None
+            else ("order", "product", "description", "quantity")
+        )
+        self._line_column_labels = {
+            "order": "Pedido",
+            "supplier_account": "Cuenta proveedor",
+            "supplier_name": "Proveedor",
+            "creation_date": "Fecha creación",
+            "destination_abc": "Destino ABC",
+            "need_date": "Fecha necesidad",
+            "product": "Producto",
+            "product_qty": "Cantidad producto",
+            "item_group": "Grupo artículo",
+            "item": "Artículo",
+            "buyer_group": "Grupo comprador",
+            "target": "Objetivo",
+            "total_need_lines": "Total líneas necesidad",
+            "code": "Código",
+            "description": "Descripción",
+            "warning_info": "Información advertencia",
+            "quantity": "Cantidad",
+            "delivery_date": "Fecha entrega",
+            "confirmed_date": "Fecha confirmada",
+            "delay_days": "Días retraso",
+            "action": "Acción",
+            "pending_delivery": "Pendiente entrega",
+            "modified_by": "Modificado por"
+        }
+        self._line_column_config_path = (
+            Path(os.environ.get("APPDATA", Path.home()))
+            / "OutlookSupplierClaimDrafter"
+            / "lines_columns.json"
+        )
+        self._line_column_config = self._load_line_column_config()
+        for column in self._available_line_columns:
+            self._line_column_labels.setdefault(
+                column, column.replace("_", " ").replace("-", " ").title()
+            )
+
         self._build_layout()
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -539,6 +583,10 @@ class MainWindow:
         signature_tab = ttk.Frame(notebook, padding=10)
         notebook.add(signature_tab, text="Firma del remitente")
         self._build_signature_panel(signature_tab)
+
+        columns_tab = ttk.Frame(notebook, padding=10)
+        notebook.add(columns_tab, text="Configuración de columnas")
+        self._build_line_columns_config_panel(columns_tab)
 
         # Al iniciar, mostrar directamente proveedores y pedidos.
         notebook.select(work_tab)
@@ -575,6 +623,7 @@ class MainWindow:
         lines_frame.pack(fill=tk.BOTH, expand=True)
 
         self._build_lines_panel(lines_frame)
+        self._refresh_line_columns_config_list()
 
         actions = ttk.Frame(work_tab)
         actions.pack(fill=tk.X, pady=(10, 0))
@@ -911,6 +960,245 @@ class MainWindow:
             )
             return False
 
+    def _load_line_column_config(self):
+        """Carga las preferencias de columnas del usuario actual."""
+        try:
+            if self._line_column_config_path.is_file():
+                data = json.loads(
+                    self._line_column_config_path.read_text(encoding="utf-8-sig")
+                )
+                if isinstance(data, dict):
+                    return data
+        except (OSError, ValueError, TypeError):
+            messagebox.showwarning(
+                "Configuración de columnas",
+                "No se pudo leer la configuración personal de columnas. "
+                "Se utilizarán los valores predeterminados."
+            )
+        return {}
+
+    def _save_line_column_config(self, show_confirmation=True):
+        config = {
+            "visible": list(self._line_display_columns),
+            "order": list(self._line_config_order),
+            "widths": dict(self._line_column_widths)
+        }
+        try:
+            self._line_column_config_path.parent.mkdir(parents=True, exist_ok=True)
+            self._line_column_config_path.write_text(
+                json.dumps(config, ensure_ascii=False, indent=2),
+                encoding="utf-8"
+            )
+            self._line_column_config = config
+            if show_confirmation:
+                messagebox.showinfo(
+                    "Configuración guardada",
+                    "La configuración de columnas se ha guardado para este usuario.",
+                    parent=self.root
+                )
+            return True
+        except OSError as exc:
+            messagebox.showerror(
+                "Error al guardar",
+                f"No se pudo guardar la configuración de columnas:\\n{exc}",
+                parent=self.root
+            )
+            return False
+
+    def _build_line_columns_config_panel(self, parent):
+        ttk.Label(
+            parent,
+            text="Selecciona las columnas que quieres ver en «Proveedores y pedidos». "
+                 "Puedes cambiar su orden y anchura."
+        ).pack(anchor=tk.W, pady=(0, 10))
+
+        body = ttk.Frame(parent)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        self.line_columns_list = tk.Listbox(
+            body, height=18, exportselection=False, activestyle="dotbox"
+        )
+        self.line_columns_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # El clic simple alterna visibilidad; Enter hace lo mismo sobre
+        # el elemento seleccionado. Se usa ButtonRelease para que Tkinter
+        # haya actualizado antes la selección del Listbox.
+        self.line_columns_list.bind("<ButtonRelease-1>", self._on_config_column_click)
+        self.line_columns_list.bind("<Return>", self._on_config_column_enter)
+        self.line_columns_list.bind("<<ListboxSelect>>", self._on_config_column_selected)
+
+        controls = ttk.Frame(body, padding=(12, 0))
+        controls.pack(side=tk.LEFT, fill=tk.Y)
+
+        ttk.Button(
+            controls, text="Mostrar / ocultar",
+            command=self._toggle_config_column
+        ).pack(fill=tk.X, pady=(0, 6))
+        ttk.Button(
+            controls, text="Subir",
+            command=lambda: self._move_config_column(-1)
+        ).pack(fill=tk.X, pady=3)
+        ttk.Button(
+            controls, text="Bajar",
+            command=lambda: self._move_config_column(1)
+        ).pack(fill=tk.X, pady=3)
+
+        ttk.Label(controls, text="Anchura (px)").pack(anchor=tk.W, pady=(14, 2))
+        self.line_column_width_var = tk.StringVar(value="140")
+        ttk.Spinbox(
+            controls, from_=65, to=1000, increment=5,
+            textvariable=self.line_column_width_var, width=10
+        ).pack(anchor=tk.W)
+        ttk.Button(
+            controls, text="Aplicar anchura",
+            command=self._apply_config_column_width
+        ).pack(fill=tk.X, pady=(5, 12))
+
+        ttk.Button(
+            controls, text="Guardar configuración",
+            command=self._save_line_column_config
+        ).pack(fill=tk.X, pady=(8, 4))
+        ttk.Button(
+            controls, text="Restaurar predeterminada",
+            command=self._reset_line_column_config
+        ).pack(fill=tk.X, pady=4)
+
+
+    def _refresh_line_columns_config_list(self, selected=None):
+        if not hasattr(self, "line_columns_list"):
+            return
+        self.line_columns_list.delete(0, tk.END)
+        self._line_config_list_columns = list(self._line_config_order)
+        visible = set(self._line_display_columns)
+        for col in self._line_config_list_columns:
+            marker = "☑" if col in visible else "☐"
+            label = self._line_column_labels.get(
+                col, col.replace("_", " ").title()
+            )
+            width = self._line_column_widths.get(col, 140)
+            self.line_columns_list.insert(
+                tk.END, f"{marker}  {label}  ({width} px)"
+            )
+        if selected is not None and 0 <= selected < self.line_columns_list.size():
+            self.line_columns_list.selection_set(selected)
+            self.line_columns_list.activate(selected)
+            col = self._line_config_list_columns[selected]
+            self.line_column_width_var.set(str(self._line_column_widths.get(col, 140)))
+
+    def _selected_config_column(self):
+        selection = self.line_columns_list.curselection()
+        if not selection:
+            return None, None
+        index = selection[0]
+        return index, self._line_config_list_columns[index]
+
+    def _on_config_column_selected(self, _event=None):
+        _index, col = self._selected_config_column()
+        if col is not None:
+            self.line_column_width_var.set(str(self._line_column_widths.get(col, 140)))
+
+    def _on_config_column_click(self, event):
+        """Alterna mostrar/ocultar el campo pulsado con un solo clic."""
+        index = self.line_columns_list.nearest(event.y)
+        if not 0 <= index < len(self._line_config_list_columns):
+            return "break"
+        self.line_columns_list.selection_clear(0, tk.END)
+        self.line_columns_list.selection_set(index)
+        self.line_columns_list.activate(index)
+        self._toggle_config_column()
+        return "break"
+
+    def _on_config_column_enter(self, _event=None):
+        """Alterna mostrar/ocultar el campo seleccionado con Enter."""
+        self._toggle_config_column()
+        return "break"
+
+    def _toggle_config_column(self, _event=None):
+        index, col = self._selected_config_column()
+        if col is None:
+            return
+        if col in self._line_display_columns:
+            if len(self._line_display_columns) == 1:
+                messagebox.showinfo(
+                    "Configuración de columnas",
+                    "Debe quedar al menos una columna visible.",
+                    parent=self.root
+                )
+                return
+            self._line_display_columns.remove(col)
+        else:
+            self._line_display_columns = [
+                item for item in self._line_config_order
+                if item in set(self._line_display_columns) | {col}
+            ]
+        self._rebuild_line_filter_row()
+        self._draw_lines_table()
+        self._refresh_line_columns_config_list(index)
+
+    def _move_config_column(self, direction):
+        index, col = self._selected_config_column()
+        if col is None:
+            return
+        target = index + direction
+        if not 0 <= target < len(self._line_config_order):
+            return
+
+        # Mover únicamente el elemento seleccionado una posición. La selección
+        # queda asociada al mismo campo tras reconstruir la lista.
+        visible = set(self._line_display_columns)
+        self._line_config_order.pop(index)
+        self._line_config_order.insert(target, col)
+        self._line_display_columns = [
+            item for item in self._line_config_order if item in visible
+        ]
+        self._rebuild_line_filter_row()
+        self._draw_lines_table()
+        self._refresh_line_columns_config_list(target)
+
+    def _apply_config_column_width(self):
+        _index, col = self._selected_config_column()
+        if col is None:
+            return
+        try:
+            width = max(65, int(self.line_column_width_var.get()))
+        except ValueError:
+            messagebox.showwarning(
+                "Anchura no válida", "Introduce un número entero de píxeles.",
+                parent=self.root
+            )
+            return
+        self._line_column_widths[col] = width
+        self._layout_line_filter_entries()
+        self._draw_lines_table()
+        selection = self.line_columns_list.curselection()
+        if selection:
+            self._refresh_line_columns_config_list(selection[0])
+
+    def _reset_line_column_config(self):
+        if not messagebox.askyesno(
+            "Restaurar configuración",
+            "¿Quieres restaurar la visibilidad, el orden y las anchuras predeterminadas?",
+            parent=self.root
+        ):
+            return
+        defaults = {
+            "order": list(self._line_columns),
+            "visible": list(self._line_columns),
+            "widths": {
+                col: {
+                    "order": 130, "product": 170, "description": 420,
+                    "quantity": 110
+                }.get(col, 140)
+                for col in self._line_columns
+            }
+        }
+        self._line_config_order = list(defaults["order"])
+        self._line_display_columns = list(defaults["visible"])
+        self._line_column_widths.update(defaults["widths"])
+        self._rebuild_line_filter_row()
+        self._draw_lines_table()
+        self._refresh_line_columns_config_list()
+        self._save_line_column_config(show_confirmation=False)
+
     def _build_lines_panel(self, parent):
         selection_actions = ttk.Frame(parent)
         selection_actions.pack(fill=tk.X, pady=(0, 6))
@@ -923,24 +1211,48 @@ class MainWindow:
             command=self._toggle_all_lines
         ).pack(side=tk.LEFT)
 
-        self._line_columns = ("order", "product", "description", "quantity")
-        self._line_column_labels = {
-            "order": "Pedido",
-            "product": "Producto",
-            "description": "Descripción",
-            "quantity": "Cantidad"
+        self._line_columns = tuple(self._available_line_columns)
+        default_widths = {
+            "order": 130, "product": 170, "description": 420,
+            "quantity": 110, "supplier_account": 130,
+            "supplier_name": 190, "creation_date": 120,
+            "destination_abc": 130, "need_date": 120,
+            "product_qty": 110, "item_group": 120, "item": 150,
+            "buyer_group": 130, "target": 110, "total_need_lines": 130,
+            "code": 110, "warning_info": 220, "delivery_date": 120,
+            "confirmed_date": 130, "delay_days": 100, "action": 130,
+            "pending_delivery": 130, "modified_by": 130
         }
         self._line_column_widths = {
-            "order": 130,
-            "product": 170,
-            "description": 420,
-            "quantity": 110
+            col: int(self._line_column_config.get("widths", {}).get(
+                col, default_widths.get(col, 140)
+            ))
+            for col in self._line_columns
         }
         self._line_filter_vars = {
             col: tk.StringVar() for col in self._line_columns
         }
         self._line_filter_entries = {}
-        self._line_display_columns = list(self._line_columns)
+        configured_order = self._line_column_config.get("order", [])
+        # Conserva el orden guardado; incorpora al final cualquier columna nueva
+        # detectada en la query y descarta las que ya no existen.
+        self._line_config_order = [
+            col for col in configured_order if col in self._line_columns
+        ]
+        self._line_config_order += [
+            col for col in self._line_columns if col not in self._line_config_order
+        ]
+        visible = set(self._line_column_config.get("visible", self._line_columns))
+        # Los campos nuevos no figuran en la configuración anterior: se muestran
+        # automáticamente para que el usuario advierta el cambio de query.
+        visible.update(
+            col for col in self._line_columns if col not in configured_order
+        )
+        self._line_display_columns = [
+            col for col in self._line_config_order if col in visible
+        ]
+        if not self._line_display_columns:
+            self._line_display_columns = list(self._line_config_order)
         self._line_filter_after_id = None
         self._line_sort_column = None
         self._line_sort_reverse = False
@@ -1101,7 +1413,7 @@ class MainWindow:
     def _line_sort_key(value, column):
         if value is None:
             return (1, "")
-        if column == "quantity":
+        if column in ("quantity", "product_qty", "delay_days", "total_need_lines"):
             try:
                 normalized = str(value).strip().replace(" ", "").replace(",", ".")
                 return (0, float(normalized))
@@ -1137,7 +1449,7 @@ class MainWindow:
         font = tkfont.nametofont("TkDefaultFont")
         bold_font = font.copy()
         bold_font.configure(weight="bold")
-        label = self._line_column_labels[col]
+        label = self._line_column_labels.get(col, col.replace("_", " ").title())
         if self._line_sort_column == col:
             label += "  " + ("▼" if self._line_sort_reverse else "▲")
 
@@ -1237,6 +1549,12 @@ class MainWindow:
                 columns.remove(source)
                 columns.insert(columns.index(target), source)
                 self._line_display_columns = columns
+                visible_positions = [
+                    index for index, item in enumerate(self._line_config_order)
+                    if item in set(columns)
+                ]
+                for index, position in enumerate(visible_positions):
+                    self._line_config_order[position] = columns[index]
                 self._rebuild_line_filter_row()
                 self._draw_lines_table()
             return
@@ -1271,14 +1589,14 @@ class MainWindow:
         return "break"
 
     def _on_lines_canvas_click(self, event):
-        """Establece como activa la misma fila de datos que se ha pulsado."""
+        """Un clic en cualquier celda alterna la inclusión de esa línea."""
         y = self.lines_canvas.canvasy(event.y)
         row_index = int(y // 28)
         if 0 <= row_index < len(self._visible_line_rows):
             row_id, _row = self._visible_line_rows[row_index]
             self._last_focused_line_id = row_id
             self.lines_canvas.focus_set()
-            self._draw_lines_table()
+            self._toggle_line_selection(row_id)
         return "break"
 
     def _rebuild_line_filter_row(self):
@@ -1371,7 +1689,7 @@ class MainWindow:
                 self.lines_header_canvas, left + 7, 10,
                 self._line_column_selected.get(col, True)
             )
-            label = self._line_column_labels[col]
+            label = self._line_column_labels.get(col, col.replace("_", " ").title())
             if self._line_sort_column == col:
                 label += "  " + ("▼" if self._line_sort_reverse else "▲")
             self.lines_header_canvas.create_text(
@@ -1394,12 +1712,7 @@ class MainWindow:
                 y0 + 7, row_selected
             )
 
-            values = {
-                "order": row.get("order", ""),
-                "product": row.get("product", ""),
-                "description": row.get("description", ""),
-                "quantity": row.get("quantity", "")
-            }
+            values = row
             for col in self._line_display_columns:
                 left, right = positions[col]
                 cell_selected = (
@@ -1415,8 +1728,9 @@ class MainWindow:
                 max_chars = max(1, int((right - left - 16) / 7))
                 if len(value) > max_chars:
                     value = value[:max_chars - 1] + "…"
-                anchor = "center" if col == "quantity" else "w"
-                text_x = (left + right) / 2 if col == "quantity" else left + 8
+                centered = col in ("quantity", "product_qty", "delay_days", "total_need_lines")
+                anchor = "center" if centered else "w"
+                text_x = (left + right) / 2 if centered else left + 8
                 self.lines_canvas.create_text(
                     text_x, (y0 + y1) / 2, text=value, anchor=anchor,
                     fill="#222222",
@@ -1681,7 +1995,8 @@ class MainWindow:
         # personalizados de proveedores se descartan al cerrar.
         if self._save_current_provider_email():
             if self._save_default_email(show_confirmation=False):
-                self.root.destroy()
+                if self._save_line_column_config(show_confirmation=False):
+                    self.root.destroy()
 
     def _toggle_all_lines(self):
         self._set_all_lines_selected(self.all_lines_var.get())
@@ -1981,9 +2296,9 @@ class MainWindow:
                 if not expression:
                     continue
                 value = row.get(col, "")
-                if col == "quantity":
+                if col in ("quantity", "product_qty", "delay_days", "total_need_lines"):
                     matches = self._match_numeric_filter(value, expression)
-                elif col in ("date", "order_date", "delivery_date"):
+                elif col in ("date", "order_date", "creation_date", "need_date", "delivery_date", "confirmed_date"):
                     matches = self._match_date_filter(value, expression)
                 else:
                     matches = self._match_text_filter(value, expression)

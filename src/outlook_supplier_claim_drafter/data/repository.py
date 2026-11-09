@@ -10,7 +10,7 @@ from .database import Database
 
 
 class SupplierRepository:
-    """Lee consultas externas y normaliza columnas según el mapping del entorno."""
+    """Lee consultas externas; conserva dinámicamente las columnas de pedidos."""
 
     def __init__(
         self,
@@ -59,8 +59,31 @@ class SupplierRepository:
             self._execute("proveedores.sql"), self.mapping["suppliers"]
         )
 
+    def get_order_line_columns(self, account: str | None = None) -> list[str]:
+        """Obtiene los nombres de columna reales de la query, incluso sin filas."""
+        query = self._read_query("lineas_pedido.sql")
+        with self.database.connect() as connection:
+            cursor = connection.cursor()
+            cursor.execute(query, (account if account is not None else "",))
+            return [
+                self._internal_order_line_name(column[0])
+                for column in cursor.description
+            ]
+
+    def _internal_order_line_name(self, source_name: str) -> str:
+        mapping = self.mapping.get("order_lines", {})
+        reverse_mapping = {
+            source_column.casefold(): internal_name
+            for internal_name, source_column in mapping.items()
+        }
+        return reverse_mapping.get(source_name.casefold(), source_name)
+
     def get_order_lines(self, account: str) -> list[dict[str, Any]]:
-        return self._normalize(
-            self._execute("lineas_pedido.sql", (account,)),
-            self.mapping["order_lines"],
-        )
+        rows = self._execute("lineas_pedido.sql", (account,))
+        return [
+            {
+                self._internal_order_line_name(source_name): value
+                for source_name, value in row.items()
+            }
+            for row in rows
+        ]
