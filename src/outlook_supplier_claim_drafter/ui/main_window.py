@@ -1033,6 +1033,9 @@ class MainWindow:
             widget.bind("<Down>", self._on_line_navigation)
             widget.bind("<Home>", self._on_line_navigation)
             widget.bind("<End>", self._on_line_navigation)
+            widget.bind("<MouseWheel>", self._on_lines_mousewheel)
+            widget.bind("<Button-4>", self._on_lines_mousewheel)
+            widget.bind("<Button-5>", self._on_lines_mousewheel)
 
         status_frame = ttk.Frame(parent)
         status_frame.pack(fill=tk.X, pady=(6, 0))
@@ -1057,6 +1060,23 @@ class MainWindow:
         self.lines_canvas.xview(*args)
         self.lines_header_canvas.xview(*args)
         self._line_filter_canvas.xview(*args)
+
+    def _on_lines_mousewheel(self, event):
+        """Desplaza conjuntamente las dos zonas verticales de la tabla."""
+        if getattr(event, "num", None) == 4:
+            units = -3
+        elif getattr(event, "num", None) == 5:
+            units = 3
+        else:
+            delta = getattr(event, "delta", 0)
+            if not delta:
+                return "break"
+            units = -int(delta / 120)
+            if units == 0:
+                units = -1 if delta > 0 else 1
+            units *= 3
+        self.lines_canvas.yview_scroll(units, "units")
+        return "break"
 
     def _schedule_line_filter(self):
         if self._line_filter_after_id is not None:
@@ -1434,15 +1454,27 @@ class MainWindow:
 
     @staticmethod
     def _match_text_filter(value, expression):
-        expression = expression.strip().casefold()
+        expression = str(expression or "").strip().casefold()
         if not expression:
             return True
-        text = str(value if value is not None else "").casefold()
-        # Sin comodín: contiene. Con comodines: *texto*, texto* o *texto.
-        if "*" not in expression:
-            return expression in text
-        pattern = "^" + re.escape(expression).replace(r"\*", ".*") + "$"
-        return re.search(pattern, text) is not None
+
+        text = str(value if value is not None else "").strip().casefold()
+        negate = expression.startswith("<>")
+        pattern = expression[2:].strip() if negate else expression
+
+        # Un operador sin criterio no debe excluir todas las filas.
+        if not pattern:
+            return True
+
+        # Sin comodines: coincidencia exacta.
+        # Con comodines: patrón completo.
+        if "*" not in pattern:
+            matched = text == pattern
+        else:
+            regex = "^" + re.escape(pattern).replace(r"\*", ".*") + "$"
+            matched = re.fullmatch(regex, text) is not None
+
+        return not matched if negate else matched
 
     @staticmethod
     def _match_numeric_filter(value, expression):
@@ -1457,7 +1489,7 @@ class MainWindow:
         if range_match:
             low, high = map(float, range_match.groups())
             return min(low, high) <= number <= max(low, high)
-        match = re.fullmatch(r"(>=|<=|>|<|=)?\s*(-?\d+(?:\.\d+)?)", expression)
+        match = re.fullmatch(r"(<>|>=|<=|>|<|=)?\s*(-?\d+(?:\.\d+)?)", expression)
         if not match:
             return False
         operator, target = match.groups()
@@ -1465,6 +1497,7 @@ class MainWindow:
         return {
             None: number == target,
             "=": number == target,
+            "<>": number != target,
             ">": number > target,
             ">=": number >= target,
             "<": number < target,
@@ -1490,7 +1523,7 @@ class MainWindow:
             if range_match:
                 first, last = map(parse_date, range_match.groups())
                 return min(first, last) <= actual <= max(first, last)
-            match = re.fullmatch(r"(>=|<=|>|<|=)?\s*(.+)", expression)
+            match = re.fullmatch(r"(<>|>=|<=|>|<|=)?\s*(.+)", expression)
             if not match:
                 return False
             operator, target_raw = match.groups()
@@ -1498,6 +1531,7 @@ class MainWindow:
             return {
                 None: actual == target,
                 "=": actual == target,
+                "<>": actual != target,
                 ">": actual > target,
                 ">=": actual >= target,
                 "<": actual < target,
@@ -1653,13 +1687,25 @@ class MainWindow:
         self._set_all_lines_selected(self.all_lines_var.get())
 
     def _set_all_lines_selected(self, selected):
+        """Selecciona/deselecciona solo las líneas visibles tras aplicar filtros."""
         if not self._selected_provider:
             return
 
-        rows = self._lines_by_provider.get(self._selected_provider, [])
-        self._line_selected = {str(index): bool(selected) for index, _row in enumerate(rows)}
-        self._line_selection_by_provider[self._selected_provider] = dict(self._line_selected)
-        self.all_lines_var.set(bool(selected))
+        # _visible_line_rows contiene únicamente las líneas que cumplen todos
+        # los filtros activos. No tocar las líneas ocultas: deben conservar su
+        # estado previo al cambiar o retirar los filtros.
+        for row_id, _row in self._visible_line_rows:
+            self._line_selected[row_id] = bool(selected)
+
+        self._line_selection_by_provider[self._selected_provider] = dict(
+            self._line_selected
+        )
+        self.all_lines_var.set(
+            bool(self._visible_line_rows) and all(
+                self._line_selected.get(row_id, False)
+                for row_id, _row in self._visible_line_rows
+            )
+        )
         self._refresh_lines()
 
     def load_initial_data(self):
@@ -2010,6 +2056,3 @@ class MainWindow:
         if row_id and row_id in self._line_selected:
             self._toggle_line_selection(row_id)
         return "break"
-
-
-
